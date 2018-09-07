@@ -1,0 +1,37 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+	
+<mapper namespace = "com.sherlock.imService.dao.GroupMemMapper">
+	<sql id="table">im_group_mem</sql>
+	
+   <insert id = "insert" parameterType = "com.sherlock.imService.entity.po.GroupMem">
+      INSERT INTO <include refid="table"/> (groupId, userId) VALUES (#{groupId}, #{userId});
+      
+      <selectKey keyProperty = "id" resultType = "int" order = "AFTER">
+         select last_insert_id() as id
+      </selectKey>   	
+   </insert>
+    <select id = "checkMember" parameterType = "com.sherlock.imService.entity.po.GroupMem" resultType ="boolean" >
+      select count(1) from <include refid="table"/> where groupId=#{groupId} and userId=#{userId};
+   </select>
+   <select id = "getGroupMems" parameterType = "int" resultType ="com.sherlock.imService.entity.po.GroupMem" >
+      select * from <include refid="table"/> where groupId=#{groupId};
+   </select>
+   
+   <select id = "getGroupMemByParam" parameterType = "com.sherlock.imService.entity.param.GroupMemParam" 
+   		resultType ="com.sherlock.imService.entity.po.GroupMem" >
+      select * from <include refid="table"/> where 
+      <choose>
+      	<when test="groupIds.size()==0">
+      		1=0
+      	</when>
+      	<otherwise>
+      		groupId in
+      		<foreach collection="groupIds" item="item" open="(" separator="," close=")"></foreach>
+      	</otherwise>
+      </choose>
+      groupId=#{groupId};
+   </select>
+   
+</mapper>

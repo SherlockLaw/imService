@@ -1,0 +1,21 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+	
+<mapper namespace = "com.sherlock.imService.dao.GroupMapper">
+	<sql id="table">im_group</sql>
+	
+   <insert id = "insert" parameterType = "com.sherlock.imService.entity.po.Group">
+      INSERT INTO <include refid="table"/> (name,headPic) VALUES (#{name}, #{headPic});
+      
+      <selectKey keyProperty = "id" resultType = "int" order = "AFTER">
+         select last_insert_id() as id
+      </selectKey>
+   </insert>
+   <select id = "getById" parameterType = "int" resultType ="com.sherlock.imService.entity.po.Group" >
+      select * from <include refid="table"/> where id = #{id};
+   </select>
+   <select id = "getGroups" parameterType = "int" resultType ="com.sherlock.imService.entity.po.Group" >
+      select b.* from im_group_mem a left join <include refid="table"/> b on a.groupId=b.id where a.userId=#{userId};
+   </select>
+</mapper>

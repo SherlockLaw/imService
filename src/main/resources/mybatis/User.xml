@@ -1,0 +1,56 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+	
+<mapper namespace = "com.sherlock.imService.dao.UserMapper">
+	<sql id="table">im_user</sql>
+	<sql id="show_attribute">id, name, sex, account, headPic</sql>
+   <insert id = "insert" parameterType = "com.sherlock.imService.entity.po.User">
+      INSERT INTO <include refid="table"/> (name, sex, account, pwd,headPic ) VALUES (#{name}, #{sex}, #{account}, #{pwd}, #{headPic});
+      
+      <selectKey keyProperty = "id" resultType = "int" order = "AFTER">
+         select last_insert_id() as id
+      </selectKey>
+   </insert>
+    
+   <select id = "getByAccount" parameterType = "string" resultType="com.sherlock.imService.entity.po.User" >
+      select * from <include refid="table"/> where account = #{account};
+   </select>
+   
+   <select id = "getById" parameterType = "int" resultType ="com.sherlock.imService.entity.po.User" >
+      select * from <include refid="table"/> where id = #{id};
+   </select>
+   
+   <select id = "search" parameterType = "string" resultType ="com.sherlock.imService.entity.po.User" >
+      select <include refid="show_attribute"/> from <include refid="table"/> where name like concat(#{keyword},'%');
+   </select>
+   
+   <select id = "existUser" parameterType = "int" resultType ="boolean" >
+      select count(1) from <include refid="table"/> where id = #{id} limit 1;
+   </select>
+   
+   <select id = "getUserList" parameterType = "java.util.List" resultType ="com.sherlock.imService.entity.po.User" >
+      select <include refid="show_attribute"/> from <include refid="table"/> where 
+      <choose>
+      	<when test="list.size()==0"> 1=0 </when>
+      <otherwise>
+      	id in
+      	<foreach collection="list" item="item" open="(" separator="," close=")">
+      		#{item}
+      	</foreach>
+      </otherwise>
+      </choose>
+   </select>
+   <update id = "update" parameterType="com.sherlock.imService.entity.param.UserParam">
+   		update <include refid="table"/>
+   		<set>
+   			<if test="name!=null">name=#{name},</if>
+   			<if test="sex!=null">sex=#{sex},</if>
+   			<if test="headPic!=null">headPic=#{headPic},</if>
+   		</set>
+   		where id=#{id}
+   </update>
+   <update id = "updatePwd" parameterType="com.sherlock.imService.entity.param.UserParam">
+   		update <include refid="table"/> set pwd=#{pwd} where id=#{id}
+   </update>
+</mapper>
