@@ -20,12 +20,14 @@ import com.sherlock.imService.netty.codec.ImEncoder;
 import com.sherlock.imService.netty.codec.ImMessageCodec;
 import com.sherlock.imService.netty.configure.Configure;
 import com.sherlock.imService.netty.entity.ConversationOrderMessage;
-import com.sherlock.imService.netty.entity.ServerACKMessage;
-import com.sherlock.imService.netty.entity.ServerCommonMessage;
-import com.sherlock.imService.netty.entity.ServerImMessage;
+import com.sherlock.imService.netty.entity.ACKMessage;
+import com.sherlock.imService.netty.entity.RoutMessage;
+import com.sherlock.imService.netty.entity.ImMessage;
+import com.sherlock.imService.netty.entity.OrderMessage;
 import com.sherlock.imService.netty.udp.UdpServerHandler;
 import com.sherlock.imService.redis.RedisService;
 import com.sherlock.imService.remote.IMMessageManager;
+import com.sherlock.imService.service.FriendService;
 import com.sherlock.imService.zookeeper.ZookeeperService;
 
 import io.netty.bootstrap.Bootstrap;
@@ -52,13 +54,16 @@ public class ImServer {
 	public static Channel channel;
 	
     @Autowired
-    private RedisService redisService;
+    public RedisService redisService;
     
     @Autowired
     private IMMessageManager iMMessageManager;
     
     @Autowired
-    private ZookeeperService zookeeperService;
+    public ZookeeperService zookeeperService;
+    
+    @Autowired
+    public FriendService friendService;
     
     @Autowired
     private ZookeeperConfigure zookeeperConfigure;
@@ -104,6 +109,7 @@ public class ImServer {
         try {
             //ServerBootstrap 是一个启动NIO服务的辅助启动类 你可以在这个服务中直接使用Channel
             ServerBootstrap b=new ServerBootstrap();
+            ImServer imServer = this;
             //这一步是必须的，如果没有设置group将会报java.lang.IllegalStateException: group not set异常
             b.group(bossGroup, workerGroup)  
             //指定使用NioServerSocketChannel产生一个Channel用来接收连接  
@@ -124,9 +130,8 @@ public class ImServer {
                     .addLast(new IdleStateHandler(Configure.MAX_IDLETIME, 0, 0, TimeUnit.SECONDS))
                     //编解码器
                     .addLast(new ImMessageCodec())
-//                    .addLast(new HeartbeatHandler())
                     //正常的业务处理
-                    .addLast(new ImInboundHandler(redisService, zookeeperService))
+                    .addLast(new ImInboundHandler(imServer))
                     .addLast(new ImOutboundHandler());  
                 };  
             })  
@@ -166,7 +171,7 @@ public class ImServer {
             bootstrap.group(eventLoopGroup)
                     .channel(NioDatagramChannel.class)
                     .option(ChannelOption.SO_BROADCAST,true)
-                    .handler(new UdpServerHandler(redisService));
+                    .handler(new UdpServerHandler(this));
             channel = bootstrap.bind(zookeeperConfigure.getSOCKET_PORT()).sync().channel();
             channel.closeFuture().await();
         } catch (InterruptedException e) {
@@ -176,7 +181,7 @@ public class ImServer {
         }
     }
     
-    public static boolean addMessageToQueue(ServerCommonMessage msg) throws IllegalStateException{
+    public static boolean addMessageToQueue(RoutMessage msg) throws IllegalStateException{
     	mqProducer.addMessageToMQ(JSONObject.toJSONString(msg));
 		return true;
     }
@@ -185,7 +190,7 @@ public class ImServer {
      * 通过本服务的连接发送
      * @param msg
      */
-	private void sendOnLocal(ServerCommonMessage msg) {
+	private void sendOnLocal(RoutMessage msg) {
 		ChannelHandlerContext ctx = ImInboundHandler.getContextByUserId(msg.getRoutId());
 		if (ctx == null || ctx.isRemoved()) {
 			offlineHandler(msg);
@@ -197,7 +202,7 @@ public class ImServer {
      * 通过全局服务发送
      * @param msg
      */
-    private void sendOnGlobal(ServerCommonMessage msg){
+    private void sendOnGlobal(RoutMessage msg){
     	if (Configure.isTcp) {
 			ChannelHandlerContext ctx = ImInboundHandler.getContextByUserId(msg.getRoutId());
 			if (ctx==null || ctx.isRemoved()) {
@@ -240,24 +245,24 @@ public class ImServer {
 	}
     public void sendMessage(String jsonMessage) {
     	//转换为对象
-    	ServerCommonMessage msg = MessageConstant.getServerCommonMessage(jsonMessage);
+    	RoutMessage msg = MessageConstant.getServerCommonMessage(jsonMessage);
     	sendOnGlobal(msg);
     }
     
     public void routMessage(String jsonMessage) {
     	//转换为对象
-    	ServerCommonMessage msg = MessageConstant.getServerCommonMessage(jsonMessage);
+    	RoutMessage msg = MessageConstant.getServerCommonMessage(jsonMessage);
     	sendOnLocal(msg);
     }
     
-    private void offlineHandler(ServerCommonMessage msg){
+    private void offlineHandler(RoutMessage msg){
     	//好友信息存离线
-		if (msg instanceof ServerImMessage) {
-			ServerImMessage message = (ServerImMessage) msg;
+		if (msg instanceof ImMessage) {
+			ImMessage message = (ImMessage) msg;
 			if (message.getGtype()==GTypeEnum.friend.getIndex()) {
 				redisService.saveConversationOfflineMessage(message);
 				//给发送方发送ACK消息
-				ServerACKMessage ackMessage = new ServerACKMessage();
+				ACKMessage ackMessage = new ACKMessage();
 				ackMessage.setGid(message.getGid());
 				ackMessage.setGtype(message.getGtype());
 				ackMessage.setAckMid(message.getMid());
@@ -266,10 +271,12 @@ public class ImServer {
 				addMessageToQueue(ackMessage);
 			}
 			redisService.addUnreadCount(message);
-			
 		} else if (msg instanceof ConversationOrderMessage) {//指令消息
 			ConversationOrderMessage message = (ConversationOrderMessage) msg;
 			redisService.saveConversationOfflineMessage(message);
+		} else if (msg instanceof OrderMessage) {
+			OrderMessage message = (OrderMessage) msg;
+			redisService.saveOfflineOrderMessage(message);
 		}
     }
 }  

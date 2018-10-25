@@ -1,0 +1,38 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+	
+<mapper namespace = "com.sherlock.imService.dao.FriendReqMapper">
+	<sql id="table">im_friend_req</sql>
+	
+   <insert id = "insert" parameterType = "com.sherlock.imService.entity.po.FriendReq">
+      INSERT INTO <include refid="table"/> (fromUserId, toUserId, status) VALUES (#{fromUserId}, #{toUserId},#{status});
+      
+      <selectKey keyProperty = "id" resultType = "int" order = "AFTER">
+         select last_insert_id() as id
+      </selectKey>   	
+   </insert>
+   
+   <select id = "get" parameterType = "int" resultType ="com.sherlock.imService.entity.po.FriendReq" >
+      select * from <include refid="table"/> where id=#{id}
+   </select>
+   
+   <select id = "getFriendReqs" parameterType = "int" resultType ="com.sherlock.imService.entity.po.FriendReq" >
+      select * from <include refid="table"/> where fromUserId=#{userId} or toUserId=#{userId};
+   </select>
+   
+   <update id = "update" parameterType="com.sherlock.imService.entity.po.FriendReq">
+   		update <include refid="table"/> 
+   		<set>
+   			<if test="fromUserId!=null">fromUserId=#{fromUserId},</if>
+   			<if test="toUserId!=null">toUserId=#{toUserId},</if>
+   			<if test="status!=null">status=#{status},</if>
+   		</set>
+   		where id=#{id}
+   </update>
+   
+   <select id = "getByUserIds" parameterType = "com.sherlock.imService.entity.po.FriendReq" resultType ="com.sherlock.imService.entity.po.FriendReq" >
+      select * from <include refid="table"/> where (fromUserId=#{fromUserId} and toUserId=#{toUserId})
+      	or (fromUserId=#{toUserId} and toUserId=#{fromUserId}) limit 1;
+   </select>
+</mapper>

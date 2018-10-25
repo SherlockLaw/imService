@@ -12,7 +12,10 @@
          select last_insert_id() as id
       </selectKey>   	
    </insert>
-    
+   <delete id = "delete" parameterType="com.sherlock.imService.entity.po.Friend">
+   		delete from <include refid="table"/> where (fromUserId=#{fromUserId} and toUserId=#{toUserId})
+      	or (fromUserId=#{toUserId} and toUserId=#{fromUserId});
+   </delete>
    <select id = "getFriends" parameterType = "int" resultType ="com.sherlock.imService.entity.po.Friend" >
       select * from <include refid="table"/> where fromUserId=#{userId} or toUserId=#{userId};
    </select>

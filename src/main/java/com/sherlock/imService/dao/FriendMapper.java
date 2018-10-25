@@ -10,6 +10,7 @@ import com.sherlock.imService.entity.po.Friend;
 public interface FriendMapper {
 	
 	public Integer insert(Friend po);
+	public int delete(Friend po);
 	
 	public List<Friend> getFriends(int userId);
 	

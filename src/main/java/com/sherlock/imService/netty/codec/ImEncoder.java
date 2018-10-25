@@ -10,7 +10,8 @@ import com.alibaba.fastjson.JSONObject;
 import com.sherlock.imService.netty.ImInboundHandler;
 import com.sherlock.imService.netty.ImServer;
 import com.sherlock.imService.netty.configure.Configure;
-import com.sherlock.imService.netty.entity.ServerCommonMessage;
+import com.sherlock.imService.netty.entity.AbstractMessage;
+import com.sherlock.imService.netty.entity.RoutMessage;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -24,7 +25,7 @@ public class ImEncoder extends MessageToByteEncoder<Object>{
 
 	@Override
 	protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
-		ServerCommonMessage message = (ServerCommonMessage) msg;
+		AbstractMessage message = (AbstractMessage) msg;
 		//报文头部
 		out.writeInt(Configure.START_FLAG);
 		out.writeByte(Configure.MSG_VER);
@@ -34,7 +35,7 @@ public class ImEncoder extends MessageToByteEncoder<Object>{
 		out.setInt(Configure.POSITION_LENGTH, out.readableBytes());
 	}
 	private static void encode(Object msg, ByteBuf out){
-		ServerCommonMessage message = (ServerCommonMessage) msg;
+		AbstractMessage message = (AbstractMessage) msg;
 		//报文头部
 		out.writeInt(Configure.START_FLAG);
 		out.writeByte(Configure.MSG_VER);
@@ -43,14 +44,14 @@ public class ImEncoder extends MessageToByteEncoder<Object>{
 		out.writeCharSequence(JSONObject.toJSONString(message), Configure.CHARSET);
 		out.setInt(Configure.POSITION_LENGTH, out.readableBytes());
 	}
-	public static void write(ChannelHandlerContext ctx,ServerCommonMessage msg,InetSocketAddress address){
+	public static void write(ChannelHandlerContext ctx,AbstractMessage msg,InetSocketAddress address){
 		if (Configure.isTcp) {
 			ctx.writeAndFlush(msg);
 		} else {
 			writeByUDP(ctx, msg,address);
 		}
 	}
-	public static void writeByUDP(ChannelHandlerContext ctx,ServerCommonMessage msg,InetSocketAddress address){
+	public static void writeByUDP(ChannelHandlerContext ctx,AbstractMessage msg,InetSocketAddress address){
 		ByteBuf buf = Unpooled.directBuffer(1024);
 		ImEncoder.encode(msg,buf);
 		Channel channel = null;

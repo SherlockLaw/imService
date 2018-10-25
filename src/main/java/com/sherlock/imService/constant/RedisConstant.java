@@ -22,6 +22,7 @@ public class RedisConstant {
 //	public static final String PREFIX_UNREAD = "unread:uId:";
 	
 	public static final String PREFIX_CONVERSION_UNREAD = "unread|routId:";
+	public static final String PREFIX_CONVERSION_INFO = "conversation|routId:";
 	
 	public static final String CONVERSION_UNREAD_HASH_SEPERATOR = "_";
 	

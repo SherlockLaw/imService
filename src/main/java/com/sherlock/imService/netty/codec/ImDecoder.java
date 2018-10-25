@@ -2,16 +2,9 @@ package com.sherlock.imService.netty.codec;
 
 import java.util.List;
 
-import com.alibaba.fastjson.JSONObject;
 import com.sherlock.imService.constant.MessageConstant;
-import com.sherlock.imService.exception.ServiceException;
 import com.sherlock.imService.netty.configure.Configure;
-import com.sherlock.imService.netty.entity.ClientACKMessage;
-import com.sherlock.imService.netty.entity.ClientAuthMessage;
-import com.sherlock.imService.netty.entity.ClientCommonMessage;
-import com.sherlock.imService.netty.entity.ClientHeartMessage;
-import com.sherlock.imService.netty.entity.ClientReadMessage;
-import com.sherlock.imService.netty.entity.ServerCommonMessage;
+import com.sherlock.imService.netty.entity.AbstractMessage;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -28,13 +21,13 @@ public class ImDecoder extends ByteToMessageDecoder{
 		if (in.readableBytes() < Configure.HEAD_LENGTH) {
 			return;
 		}
-		ClientCommonMessage msg = TCPandUDPCommonDecode(in);
+		AbstractMessage msg = TCPandUDPCommonDecode(in);
 		if (msg != null) {
 			out.add(msg);
 		}
 	}
 
-	public static ClientCommonMessage TCPandUDPCommonDecode(ByteBuf in) {
+	public static AbstractMessage TCPandUDPCommonDecode(ByteBuf in) {
 		in.markReaderIndex();
 		// 报文头部
 		int startFlag = in.readInt();// 开始标志
@@ -54,7 +47,7 @@ public class ImDecoder extends ByteToMessageDecoder{
 		}
 		String str = in.readCharSequence(msgLen - Configure.HEAD_LENGTH, Configure.CHARSET).toString();
 		
-		ClientCommonMessage msg = MessageConstant.getClientCommonMessage(msgType, str);
+		AbstractMessage msg = MessageConstant.getClientMessage(msgType, str);
 		return msg;
 	}
 	

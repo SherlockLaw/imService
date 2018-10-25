@@ -1,14 +1,20 @@
 package com.sherlock.imService.entity.vo;
 
-public class UnreadVO {
+import java.io.Serializable;
 
-	private Integer count;
+public class UnreadVO implements Serializable{
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -5919305650316992553L;
+	private int count;
 	private String lastMsg;
 	private long lastTime;
-	public Integer getCount() {
+	public int getCount() {
 		return count;
 	}
-	public void setCount(Integer count) {
+	public void setCount(int count) {
 		this.count = count;
 	}
 	public String getLastMsg() {

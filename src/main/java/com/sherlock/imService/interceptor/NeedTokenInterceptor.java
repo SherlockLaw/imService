@@ -25,9 +25,9 @@ public class NeedTokenInterceptor implements HandlerInterceptor{
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
 			throws Exception {
 		String token = request.getHeader("token");
-//		if (StringUtils.isBlank(token)) {
-//			token = request.getParameter("token");
-//		}
+		if (StringUtils.isBlank(token)) {
+			token = request.getParameter("token");
+		}
 		
 		if (StringUtils.isBlank(token)) {
 			throw new ServiceException(Result.TOKEN_INVALID_CODE, "需要在Header中传输token");

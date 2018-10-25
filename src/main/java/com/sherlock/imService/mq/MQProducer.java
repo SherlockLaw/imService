@@ -3,36 +3,55 @@ package com.sherlock.imService.mq;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.AMQP.Confirm.SelectOk;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ConfirmListener;
-import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.MessageProperties;
 import com.rabbitmq.client.ReturnListener;
-import com.rabbitmq.client.AMQP.Basic;
-import com.rabbitmq.client.AMQP.Basic.Return;
-import com.rabbitmq.client.AMQP.BasicProperties;
-import com.rabbitmq.client.AMQP.Confirm.SelectOk;
+import com.rabbitmq.client.ShutdownListener;
+import com.rabbitmq.client.ShutdownSignalException;
 
 @Component
 public class MQProducer {
+	private static final Logger logger = LoggerFactory.getLogger(MQProducer.class);
 	
 	@Autowired
 	private MQConnectionUtil mqConnectionUtil;
 	
 	public static final String TASK_QUEUE_NAME="task_queue";
-	public static void main(String[] args){
+	
+	private Channel channel;
+	
+	private Channel getChannel(){
+		if (channel==null || !channel.isOpen()) {
+			channel = getChannel0();
+		}
+		return channel;
 		
 	}
-    public void addMessageToMQ(String jsonMessage) {
-        Channel channel = mqConnectionUtil.getChannel();
+	private Channel getChannel0() {
+		Channel channel = mqConnectionUtil.getChannel();
 		try {
 			//设置为生产者确认
 			SelectOk sok = channel.confirmSelect();
 			channel.queueDeclare(TASK_QUEUE_NAME,true,false,false,null);
+			channel.addShutdownListener(new ShutdownListener() {
+				
+				@Override
+				public void shutdownCompleted(ShutdownSignalException cause) {
+					try {
+						channel.close();
+					} catch (IOException | TimeoutException e) {
+						logger.error("连接断开", e);
+					}
+				}
+			});
 			channel.addConfirmListener(new ConfirmListener() {
 				@Override
 				public void handleAck(long deliveryTag, boolean multiple) throws IOException {
@@ -63,21 +82,34 @@ public class MQProducer {
 				}
 				
 			});
-	        //分发信息
-	        channel.basicPublish("",TASK_QUEUE_NAME,
-	        		MessageProperties.PERSISTENT_TEXT_PLAIN,jsonMessage.getBytes());
 		} catch (IOException e) {
 			e.printStackTrace();
 		} finally {
-			try {
-				channel.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-			} catch (TimeoutException e) {
-				e.printStackTrace();
-			}
-	        
+			closeChannel();  
 		}
-        
-    }
+		return channel;
+	}
+	private void closeChannel(){
+		if (channel==null || !channel.isOpen()) {
+			return;
+		}
+		try {
+			channel.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (TimeoutException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public void addMessageToMQ(String jsonMessage) {
+		try {
+			Channel channel0 = getChannel();
+
+			channel0.basicPublish("", TASK_QUEUE_NAME, MessageProperties.PERSISTENT_TEXT_PLAIN, jsonMessage.getBytes());
+		} catch (IOException e) {
+			logger.error("无法将消息加入MQ", e);
+		}
+
+	}
 }

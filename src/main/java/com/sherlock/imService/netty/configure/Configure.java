@@ -21,14 +21,16 @@ public class Configure {
 	public final static byte MSG_AUTH = 2;//客户端注册成功消息
 	public final static byte MSG_AUTH_BACK = 3;//注册成功或者失败消息
 	
-	public final static byte MSG_ADDFRIEND = 4;//添加好友消息
+	public final static byte MSG_ADDFRIEND_REQUEST = 4;//添加好友消息
 	public final static byte MSG_ADDGROUP = 5;//添加好友消息
+	public final static byte MSG_ADDFRIEND_CONFIRM = 6;//添加好友消息的确认消息
+	public final static byte MSG_DELFRIEND = 7;//删除好友消息
 	public final static byte MSG_CLIENT_HEARTBEAT = 102;//客户端心跳消息
 	
 	public final static byte MSG_IM = 10;//im消息
-	public final static byte MSG_ORDER = 11;//指令消息
-	public final static byte MSG_CLIENT_ACK = 12;//客户端确认消息
-	public final static byte MSG_CLIENT_READ = 13;//客户端已读确认消息
+	public final static byte MSG_CONVERSATION_ORDER = 11;//指令消息
+	public final static byte MSG_ACK = 12;//客户端确认消息
+	public final static byte MSG_READ = 13;//客户端已读确认消息
 	
 	public final static byte MSG_OFFLINE = 14;//客户端离线消息，用以通知客户端拉取离线
 	

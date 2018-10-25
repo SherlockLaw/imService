@@ -1,7 +1,7 @@
 package com.sherlock.imService.mq;
 
 import java.io.IOException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.annotation.PostConstruct;
@@ -13,10 +13,11 @@ import org.springframework.stereotype.Component;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.ShutdownListener;
+import com.rabbitmq.client.ShutdownSignalException;
 import com.sherlock.imService.netty.ImServer;
 
 @Component
@@ -30,30 +31,42 @@ public class MQWork {
 	@Autowired
 	private ImServer imServer;
 	
+	//控制重连
+	private final Semaphore sem = new Semaphore(1);
+	
 	@PostConstruct
     public void startTakeMessageFromMQTask() {
-    	Runnable runnable = new Runnable() {
-			
+    	Runnable runnable = new Runnable() {		
 			@Override
 			public void run() {
-				mqConnectionUtil.waitForInitial();
-				System.out.println("消费线程启动");
-				//while (!isStop.get()) {
-					handler();
-				//}
+				logger.info("消费线程启动");
+				while (!isStop.get()) {
+					try {
+						sem.acquire();
+						connectAndHandler();
+					} catch (InterruptedException e) {
+						logger.error("MQ连接异常：", e);
+					}
+				}
 	
 			}
 		};
         new Thread(runnable).start();
     }
 	
-    private void handler(){
+    private void connectAndHandler(){
     	Channel channel = mqConnectionUtil.getChannel();
         try {
 			channel.queueDeclare(MQProducer.TASK_QUEUE_NAME, true, false, false, null);
 	        //每次从队列获取的数量
 	        channel.basicQos(1);
-
+	        channel.addShutdownListener(new ShutdownListener() {
+				@Override
+				public void shutdownCompleted(ShutdownSignalException cause) {
+					//释放信号量，进入重连机制
+					sem.release();
+				}
+			});
 	        final Consumer consumer = new DefaultConsumer(channel) {
 	        	private Channel channel;
 	        	public DefaultConsumer init(Channel channel){

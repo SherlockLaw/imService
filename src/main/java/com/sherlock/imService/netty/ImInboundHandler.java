@@ -12,16 +12,15 @@ import com.alibaba.fastjson.JSONObject;
 import com.sherlock.imService.entity.vo.UserVO;
 import com.sherlock.imService.netty.codec.ImEncoder;
 import com.sherlock.imService.netty.configure.Configure;
-import com.sherlock.imService.netty.entity.ClientACKMessage;
+import com.sherlock.imService.netty.entity.ACKMessage;
+import com.sherlock.imService.netty.entity.AbstractMessage;
+import com.sherlock.imService.netty.entity.AddFriendConfirmMessage;
+import com.sherlock.imService.netty.entity.AuthBackMessage;
 import com.sherlock.imService.netty.entity.ClientAuthMessage;
-import com.sherlock.imService.netty.entity.ClientCommonMessage;
 import com.sherlock.imService.netty.entity.ClientHeartMessage;
-import com.sherlock.imService.netty.entity.ClientReadMessage;
+import com.sherlock.imService.netty.entity.ImMessage;
 import com.sherlock.imService.netty.entity.OfflineMessage;
-import com.sherlock.imService.netty.entity.ServerACKMessage;
-import com.sherlock.imService.netty.entity.ServerAuthBackMessage;
-import com.sherlock.imService.netty.entity.ServerImMessage;
-import com.sherlock.imService.netty.entity.ServerReadMessage;
+import com.sherlock.imService.netty.entity.ReadMessage;
 import com.sherlock.imService.redis.RedisService;
 import com.sherlock.imService.zookeeper.ZookeeperService;
 
@@ -36,16 +35,13 @@ public class ImInboundHandler extends ChannelInboundHandlerAdapter {
 	
 	private static ConcurrentHashMap<String, ChannelHandlerContext> userIdContextMap = new ConcurrentHashMap<>();
 	
-	private static AttributeKey<String> userIdAttr = AttributeKey.valueOf("userId"); 
+	private static AttributeKey<String> userIdAttr = AttributeKey.valueOf("userId");
+	private static AttributeKey<String> tokenAttr = AttributeKey.valueOf("token");
 	
-	private RedisService redisService;
-	private ZookeeperService zookeeperService;
-	@Autowired
 	private ImServer imServer;
 	
-	public ImInboundHandler(RedisService redisService,ZookeeperService zookeeperService){
-		this.redisService = redisService;
-		this.zookeeperService = zookeeperService;
+	public ImInboundHandler(ImServer imServer){
+		this.imServer = imServer;
 	}
 	
     @Override
@@ -53,90 +49,88 @@ public class ImInboundHandler extends ChannelInboundHandlerAdapter {
             throws Exception {
     	logger.info("收到来自客户端的消息:"+msg.getClass().getSimpleName()+JSONObject.toJSONString(msg));
     	
-    	ClientCommonMessage message = (ClientCommonMessage) msg;
-    	clientMessageHandler(redisService, zookeeperService, ctx, message,null);
+    	AbstractMessage message = (AbstractMessage) msg;
+    	clientMessageHandler(imServer, ctx, message,null);
     }
     
-    public static void clientMessageHandler(RedisService redisService,ZookeeperService zookeeperService, ChannelHandlerContext ctx, ClientCommonMessage message,DatagramPacket packet){
-    	//先校验token
-    	if (StringUtils.isBlank(message.getToken())) {
-    		logger.info("客户端token没有传输");
-			ctx.disconnect();
-			return;
-		}
-    	UserVO user = redisService.getUserByToken(message.getToken());
-    	if (user==null) {
-    		logger.info("客户端token无效,token"+message.getToken());
-    		//TODO:给客户端发送无效的消息
-    		
-			ctx.disconnect();
-			return;
-		}
+    public static void clientMessageHandler(ImServer imServer, ChannelHandlerContext ctx, 
+    		AbstractMessage message,DatagramPacket packet){
     	InetSocketAddress sender = null;
     	if (!Configure.isTcp) {
     		sender = packet.sender();
-    		boolean offline = 
-    		setClientInetSocketAddress(redisService, user.getId(), sender);
-    		if (offline) {
-				OfflineMessage offlineMessage = new OfflineMessage();
-				ImEncoder.write(ctx, offlineMessage,sender);
-			}
-		}
+    	}
     	//如果是认证信息
     	if (message instanceof ClientAuthMessage) {
+    		ClientAuthMessage msg= (ClientAuthMessage) message;
+    		//先校验token
+        	if (StringUtils.isBlank(msg.getToken())) {
+        		logger.info("客户端token没有传输");
+    			ctx.disconnect();
+    			return;
+    		}
+    		UserVO user = imServer.redisService.getUserByToken(msg.getToken());
     		if (Configure.isTcp) {
     			setUserId(ctx, user.getId()+"");
+    			setToken(ctx, msg.getToken());
     			userIdContextMap.put(user.getId()+"", ctx);
     			//设置连接所在的机器
-    			redisService.addUserToRoutTable(user.getId(), 
-    					zookeeperService.getInnerIpPort(zookeeperService.getServiceName()));
-    			redisService.addServiceCount(zookeeperService.getServiceName());
+    			imServer.redisService.addUserToRoutTable(user.getId(), 
+    					imServer.zookeeperService.getInnerIpPort(imServer.zookeeperService.getServiceName()));
+    			imServer.redisService.addServiceCount(imServer.zookeeperService.getServiceName());
 			} else {
 				logger.debug("认证时的地址："+sender);
 			}
-			ServerAuthBackMessage authBackMessage = new ServerAuthBackMessage();
-			authBackMessage.setState(ServerAuthBackMessage.success);
+			AuthBackMessage authBackMessage = new AuthBackMessage();
+			authBackMessage.setState(AuthBackMessage.success);
 			ImEncoder.write(ctx, authBackMessage,sender);
 			return;
 		}
-    	//未认证
-    	if (Configure.isTcp && getUserId(ctx)==null) {
-    		ServerAuthBackMessage authBackMessage = new ServerAuthBackMessage();
-			authBackMessage.setState(ServerAuthBackMessage.failure);
+    	String token = null;
+    	if (Configure.isTcp && (token=getToken(ctx))==null) {
+    		logger.info("客户端未认证");
+    		AuthBackMessage authBackMessage = new AuthBackMessage();
+			authBackMessage.setState(AuthBackMessage.failure);
 			ImEncoder.write(ctx, authBackMessage,sender);
+			ctx.close();
 			return;
 		}
+    	/**
+    	 * 认证通过后的逻辑
+    	 */
+    	Integer userId = null;
+    	if (!Configure.isTcp) {
+    		userId = Integer.valueOf(getUserId(ctx));
+    		boolean offline = setClientInetSocketAddress(imServer.redisService, userId, sender);
+//    		if (offline) {
+//				OfflineMessage offlineMessage = new OfflineMessage();
+//				ImEncoder.write(ctx, offlineMessage,sender);
+//			}
+		}
+    	
     	//刷新token的过期时间
-    	redisService.resetTokenTime(message.getToken());
+    	imServer.redisService.resetTokenTime(token);
     	//如果是心跳包
     	if (message instanceof ClientHeartMessage) {
 		}
-    	//客户端确认消息
-    	if(message instanceof ClientACKMessage) {
-    		ClientACKMessage msgSrc = (ClientACKMessage) message;
-    		ServerACKMessage msgTo = new ServerACKMessage();
-    		msgTo.setAckMid(msgSrc.getAckMid());
-    		msgTo.setRoutId(msgSrc.getRoutId());
-    		
-    		msgTo.setGid(msgSrc.getGid());
-    		msgTo.setGtype(msgSrc.getGtype());
-    		msgTo.setTime(msgSrc.getTime());
-    		
-    		//发送给另一个客户端（原始消息的发送方）
-    		ImServer.addMessageToQueue(msgTo);
-    	} else if (message instanceof ClientReadMessage) {
-    		ClientReadMessage msgSrc = (ClientReadMessage) message;
-    		ServerReadMessage msgTo = new ServerReadMessage();
-    		msgTo.setReadMid(msgSrc.getReadMid());
-    		msgTo.setRoutId(msgSrc.getRoutId());
-    		
-    		msgTo.setGid(msgSrc.getGid());
-    		msgTo.setGtype(msgSrc.getGtype());
-    		msgTo.setTime(msgSrc.getTime());
-    		
-    		//发送给另一个客户端（原始消息的发送方）
-    		ImServer.addMessageToQueue(msgTo);
+    	
+    	if(message instanceof ACKMessage) {
+    		//消息确认消息
+    		ACKMessage msgSrc = (ACKMessage) message;
+    		ImServer.addMessageToQueue(msgSrc);
+    		return;
+    	}
+    	if (message instanceof ReadMessage) {
+    		//已读消息
+    		ReadMessage msgSrc = (ReadMessage) message;
+    		ImServer.addMessageToQueue(msgSrc);
+    		return;
 		}
+//    	if (message instanceof AddFriendConfirmMessage) {
+//    		//添加好友，接收者确认消息
+//    		AddFriendConfirmMessage msg = (AddFriendConfirmMessage) message;
+//    		imServer.friendService.addFriends(msg.getFromUserId(), msg.getToUserId(), msg.getStatus());
+//    		return;
+//		}
     }
       
     @Override  
@@ -146,7 +140,7 @@ public class ImInboundHandler extends ChannelInboundHandlerAdapter {
         ctx.close();  
     }
     
-    public boolean sendMessage(int userId,ServerImMessage msg){
+    public boolean sendMessage(int userId,ImMessage msg){
     	ChannelHandlerContext ctx = userIdContextMap.get(userId+"");
     	if (ctx==null) {
 			return false;
@@ -162,6 +156,12 @@ public class ImInboundHandler extends ChannelInboundHandlerAdapter {
     private static void setUserId(ChannelHandlerContext ctx,String userId) {
     	ctx.channel().attr(userIdAttr).set(userId);
     }
+    private static String getToken(ChannelHandlerContext ctx){
+    	return ctx.channel().attr(tokenAttr).get();
+    }
+    private static void setToken(ChannelHandlerContext ctx,String token) {
+    	ctx.channel().attr(tokenAttr).set(token);
+    }
     public static InetSocketAddress getClientInetSocketAddress(RedisService redisService,int userId){
     	return redisService.getUserAddr(userId);
     }
@@ -176,8 +176,8 @@ public class ImInboundHandler extends ChannelInboundHandlerAdapter {
     	if (userId!=null) {
     		logger.info("用户连接断开,urserId:"+userId);
     		userIdContextMap.remove(userId);
-    		redisService.deleteUserFromRoutTable(Integer.valueOf(userId));
-    		redisService.deleteServiceCount(zookeeperService.getServiceName());
+    		imServer.redisService.deleteUserFromRoutTable(Integer.valueOf(userId));    			
+    		imServer.redisService.deleteServiceCount(imServer.zookeeperService.getServiceName());
 		}
         ctx.fireChannelActive();
     }

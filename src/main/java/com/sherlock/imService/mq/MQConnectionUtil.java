@@ -1,10 +1,8 @@
 package com.sherlock.imService.mq;
 
 import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
 import org.slf4j.Logger;
@@ -23,42 +21,23 @@ public class MQConnectionUtil {
 
 	@Autowired
 	private MQConfigure mqConfigure;
+	
 	private Connection connection;
 	
-	private CountDownLatch latch = new CountDownLatch(1);
-	
-	@PostConstruct
-	void init(){
-		connection = getConnection();
-		latch.countDown();
-	}
-	public void waitForInitial(){
-		try {
-			latch.await();
-		} catch (InterruptedException e) {
-			logger.error("latch等待过程中出现了中断动作");
-		}
-	}
 	@PreDestroy
 	void detory() {
+		if (connection == null || !connection.isOpen()) {
+			return;
+		}
 		try {
 			connection.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
-	public Channel getChannel(){
-		Channel c = null;
-		try {
-			c = connection.createChannel();
-		} catch (IOException e) {
-			logger.error("无法创建MQ channel",e);
-		}
-		return c;
-	}
-	 
+	
 	private Connection getConnection() {
-		 //创建连接工厂
+		//创建连接工厂
         ConnectionFactory factory = new ConnectionFactory();
         //设置RabbitMQ相关信息
         factory.setHost(mqConfigure.getHost());
@@ -74,5 +53,18 @@ public class MQConnectionUtil {
 		}
         return connection;
 	}
-
+	
+	public Channel getChannel(){
+		//获取连接
+		if (connection==null || !connection.isOpen()) {
+			connection = getConnection();
+		}
+		Channel c = null;
+		try {
+			c = connection.createChannel();
+		} catch (IOException e) {
+			logger.error("无法创建MQ channel",e);
+		}
+		return c;
+	}
 }

@@ -15,10 +15,11 @@ import com.sherlock.imService.entity.vo.UnreadVO;
 import com.sherlock.imService.exception.ServiceException;
 import com.sherlock.imService.netty.ImServer;
 import com.sherlock.imService.netty.entity.ConversationOfflineMessage;
-import com.sherlock.imService.netty.entity.ServerImMessage;
-import com.sherlock.imService.netty.entity.ServerPicMessage;
-import com.sherlock.imService.netty.entity.ServerRetractMessage;
-import com.sherlock.imService.netty.entity.ServerTextMessage;
+import com.sherlock.imService.netty.entity.ImMessage;
+import com.sherlock.imService.netty.entity.OrderMessage;
+import com.sherlock.imService.netty.entity.PicMessage;
+import com.sherlock.imService.netty.entity.RetractMessage;
+import com.sherlock.imService.netty.entity.TextMessage;
 import com.sherlock.imService.redis.RedisService;
 
 @Service
@@ -48,7 +49,7 @@ public class MessageService {
 		8 给B存离线，转7
 		如果7出现A断线的情况，给A存离线，A上线后拉取
 		*/
-		ServerImMessage msg = getMessage(param);
+		ImMessage msg = getMessage(param);
 		if (GTypeEnum.friend.getIndex() == param.getGtype()) {
 			msg.setRoutId(param.getGid());
 			addMessageToQueue(msg);
@@ -62,7 +63,7 @@ public class MessageService {
 			List<Integer> memIdList = groupMemService.getGroupMemIds(param.getGid());
 			for (Integer uid : memIdList) {
 				if (param.getFromUserId().intValue() != uid) {
-					ServerImMessage message = msg.clone();
+					ImMessage message = msg.clone();
 					message.setRoutId(uid);
 					addMessageToQueue(message);
 				}
@@ -80,7 +81,7 @@ public class MessageService {
 		return true;
 	}
 	
-	private void addMessageToQueue(ServerImMessage msg){
+	private void addMessageToQueue(ImMessage msg){
 		try {
 			ImServer.addMessageToQueue(msg);
 		} catch (IllegalStateException e) {
@@ -95,8 +96,8 @@ public class MessageService {
 	 * @param content
 	 * @return
 	 */
-	public ServerTextMessage getTextMessage(int fromUserId,int gtype, int gid,String content){
-		ServerTextMessage msg = new ServerTextMessage();
+	public TextMessage getTextMessage(int fromUserId,int gtype, int gid,String content){
+		TextMessage msg = new TextMessage();
 		msg.setContent(content);
 		setCommonMsg(msg, fromUserId, gtype, gid, MessageConstant.MSGTYPE_TEXT,null);
 		return msg;
@@ -109,7 +110,7 @@ public class MessageService {
 	 * @param gid
 	 * @param messageType
 	 */
-	private void setCommonMsg(ServerImMessage msg, int fromUserId,int gtype, int gid,int messageType,String mid){
+	private void setCommonMsg(ImMessage msg, int fromUserId,int gtype, int gid,int messageType,String mid){
 		msg.setFromUserId(fromUserId);
 		msg.setGtype(gtype);
 		msg.setGid(gid);
@@ -123,15 +124,15 @@ public class MessageService {
 	/**
 	 * 生成消息
 	 */
-	private ServerImMessage getMessage(MessageParam param){
-		ServerImMessage msg;
+	private ImMessage getMessage(MessageParam param){
+		ImMessage msg;
 		switch (param.getMessageType()) {
 		case MessageConstant.MSGTYPE_TEXT:{
 			if (param.getContent()==null) {
 				throw new ServiceException("文本不能为空");
 			}
-			msg = new ServerTextMessage();
-			ServerTextMessage message = (ServerTextMessage) msg;
+			msg = new TextMessage();
+			TextMessage message = (TextMessage) msg;
 			message.setContent(param.getContent());
 			break;
 		}
@@ -145,8 +146,8 @@ public class MessageService {
 			if (param.getHeight()==null) {
 				throw new ServiceException("图片高度不能为空");
 			}
-			msg = new ServerPicMessage();
-			ServerPicMessage message = (ServerPicMessage) msg;
+			msg = new PicMessage();
+			PicMessage message = (PicMessage) msg;
 			message.setUrl(param.getImageUrl());
 			message.setWidth(param.getWidth());
 			message.setHeigth(param.getHeight());
@@ -157,8 +158,8 @@ public class MessageService {
 			if (StringUtils.isBlank(param.getRetractMid())) {
 				throw new ServiceException("retractMid(需要撤回的消息mid)不能为空");
 			}
-			msg = new ServerRetractMessage();
-			ServerRetractMessage message = (ServerRetractMessage) msg;
+			msg = new RetractMessage();
+			RetractMessage message = (RetractMessage) msg;
 			message.setRetractMid(param.getRetractMid());
 			break;
 		}
@@ -185,7 +186,7 @@ public class MessageService {
 		redisService.deleteUnreadCountMap(userId,map);
 	}
 	
-	public List<ConversationOfflineMessage> getConversationOfflineMessage(int userId, int gtype, int gid,long lastMsgTime){
+	public List<ConversationOfflineMessage> getConversationOfflineMessage(int userId, int gtype, int gid,Long lastMsgTime){
 		if (GTypeEnum.friend.getIndex()==gtype) {
 			return redisService.getConversationOfflineMessage(userId, gtype, gid);
 		} else if (GTypeEnum.group.getIndex()==gtype) {
@@ -204,12 +205,11 @@ public class MessageService {
 		}
 		redisService.deleteConversationOfflineMessage(userId, gtype, gid, lastMsgTime);
 	}
+	public List<OrderMessage> getOfflineOrderMessage(int userId) {
+		return redisService.getOfflineOrderMessage(userId);
+	}
 	
-//	public List<ConversationOrderMessage> getOrderMessage(int userId, int gtype, int gid,long lastMsgTime){
-//		return redisService.getOrderMessage(userId, gtype, gid, lastMsgTime);
-//	}
-//	public void deleteOrderMessage(int userId, int gtype, int gid,long lastMsgTime){
-//		redisService.deleteOrderMessage(userId, gtype, gid, lastMsgTime);
-//	}
-	
+	public void delOfflineOrderMessage(int userId,long time) {
+		redisService.delOfflineOrderMessage(userId, time);
+	}
 }

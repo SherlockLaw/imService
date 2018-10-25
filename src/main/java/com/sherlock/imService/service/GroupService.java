@@ -15,7 +15,7 @@ import com.sherlock.imService.entity.po.User;
 import com.sherlock.imService.entity.vo.GroupVO;
 import com.sherlock.imService.exception.ServiceException;
 import com.sherlock.imService.netty.ImServer;
-import com.sherlock.imService.netty.entity.ServerAddGroupMessage;
+import com.sherlock.imService.netty.entity.AddGroupMessage;
 
 @Service
 public class GroupService {
@@ -74,7 +74,7 @@ public class GroupService {
 		int groupId = po.getId();
 		for (Integer memberId: memberIdList) {
 			groupMemService.insert(groupId, memberId);
-			ServerAddGroupMessage msg = new ServerAddGroupMessage();
+			AddGroupMessage msg = new AddGroupMessage();
 			msg.setGroupId(groupId);
 			msg.setRoutId(memberId);
 			try {

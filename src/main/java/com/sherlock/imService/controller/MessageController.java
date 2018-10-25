@@ -27,10 +27,6 @@ public class MessageController {
 	public Result sendMessage(MessageParam param){
 		return Result.success(messageService.sendMessage(param));
 	}
-//	@RequestMapping(value="/getUnreadCount", method={RequestMethod.GET})
-//	public Result getUnreadCount(@RequestParam Integer userId) {
-//		return Result.success(messageService.getUnreadCount(userId));
-//	}
 	
 	@RequestMapping(value="/getUnreadCountMap", method={RequestMethod.GET})
 	public Result getUnreadCountMap(@RequestParam Integer userId) {
@@ -59,7 +55,7 @@ public class MessageController {
 	 * @return
 	 */
 	@RequestMapping(value="/getConversationOfflineMessage", method={RequestMethod.GET})
-	public Result getConversationOfflineMessage(@RequestParam Integer userId,@RequestParam Integer gtype,@RequestParam Integer gid,@RequestParam Long lastMsgTime) {
+	public Result getConversationOfflineMessage(@RequestParam Integer userId,@RequestParam Integer gtype,@RequestParam Integer gid, Long lastMsgTime) {
 		return Result.success(messageService.getConversationOfflineMessage(userId, gtype, gid,lastMsgTime));
 	}
 	/**
@@ -76,18 +72,29 @@ public class MessageController {
 		return Result.success("删除成功");
 	}
 	
-//	/**
-//	 * 获取离线指令消息
-//	 * @param userId
-//	 * @return
-//	 */
-//	@RequestMapping(value="/getOrderMessage", method={RequestMethod.GET})
-//	public Result getOrderMessage(@RequestParam Integer userId,@RequestParam Integer gtype,@RequestParam Integer gid,@RequestParam Long lastMsgTime) {
-//		return Result.success(messageService.getOrderMessage(userId, gtype, gid, lastMsgTime));
-//	}
-//	@RequestMapping(value="/deleteOrderMessage", method={RequestMethod.POST})
-//	public Result deleteOrderMessage(@RequestParam Integer userId,@RequestParam Integer gtype,@RequestParam Integer gid,@RequestParam Long lastMsgTime) {
-//		messageService.deleteOrderMessage(userId, gtype, gid, lastMsgTime);;
-//		return Result.success("删除成功");
-//	}
+	/**
+	 * 获取离线IM消息
+	 * @param userId
+	 * @param gtype
+	 * @param gid
+	 * @param lastMsgTime
+	 * @return
+	 */
+	@RequestMapping(value="/getOfflineOrderMessage", method={RequestMethod.GET})
+	public Result getOfflineOrderMessage(@RequestParam int userId) {
+		return Result.success(messageService.getOfflineOrderMessage(userId));
+	}
+	/**
+	 * 删除离线IM消息
+	 * @param userId
+	 * @param gtype
+	 * @param gid
+	 * @param lastMsgTime
+	 * @return
+	 */
+	@RequestMapping(value="/delOfflineOrderMessage", method={RequestMethod.POST})
+	public Result delOfflineOrderMessage(@RequestParam int userId, @RequestParam Long lastMsgTime) {
+		messageService.delOfflineOrderMessage(userId, lastMsgTime);
+		return Result.success("删除成功");
+	}
 }

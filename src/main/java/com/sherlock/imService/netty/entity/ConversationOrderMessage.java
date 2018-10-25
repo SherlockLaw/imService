@@ -9,6 +9,6 @@ import com.sherlock.imService.netty.configure.Configure;
 public abstract class ConversationOrderMessage extends ConversationOfflineMessage{
 
 	public ConversationOrderMessage(){
-		this.msgType = Configure.MSG_ORDER;
+		this.msgType = Configure.MSG_CONVERSATION_ORDER;
 	}	
 }

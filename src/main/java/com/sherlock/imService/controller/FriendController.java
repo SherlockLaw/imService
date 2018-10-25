@@ -16,13 +16,33 @@ public class FriendController {
 	@Autowired
 	private FriendService friendService;
 	
-	@RequestMapping(value="/addFriends",method={RequestMethod.POST})
-	public Result addFriends(@RequestParam int fromUserId,@RequestParam int toUserId) {
-		return Result.success(friendService.addFriends(fromUserId, toUserId));
+	@RequestMapping(value="/addFriendRequest",method={RequestMethod.POST})
+	public Result addFriendRequest(@RequestParam int fromUserId,@RequestParam int toUserId) {
+		friendService.addFriendRequest(fromUserId, toUserId);
+		return Result.success("");
 	}
+	@RequestMapping(value="/delFriend",method={RequestMethod.POST})
+	public Result delFriend(@RequestParam int fromUserId,@RequestParam int toUserId) {
+		friendService.delFriend(fromUserId, toUserId);
+		return Result.success("");
+	}
+//	@RequestMapping(value="/addFriends",method={RequestMethod.POST})
+//	public Result addFriends(@RequestParam int fromUserId,@RequestParam int toUserId) {
+//		return Result.success(friendService.addFriends(fromUserId, toUserId));
+//	}
 	
 	@RequestMapping(value="/getFriends",method={RequestMethod.GET})
 	public Result getFriends(@RequestParam int userId) {
 		return Result.success(friendService.getFriends(userId));
+	}
+	
+	@RequestMapping(value="/getFriendRequests",method={RequestMethod.GET})
+	public Result getFriendRequests(@RequestParam int userId) {
+		return Result.success(friendService.getFriendReqs(userId));
+	}
+	
+	@RequestMapping(value="/confirmFriendRequest",method={RequestMethod.POST})
+	public Result confirmFriendRequest(@RequestParam int id, int status) {
+		return Result.success(friendService.confirmFriendRequest(id, status));
 	}
 }

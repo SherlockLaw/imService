@@ -3,27 +3,35 @@ package com.sherlock.imService.redis;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.stereotype.Service;
 
+import com.alibaba.fastjson.JSONObject;
+import com.sherlock.imService.constant.MessageConstant;
 import com.sherlock.imService.constant.RedisConstant;
 import com.sherlock.imService.entity.vo.UnreadVO;
 import com.sherlock.imService.entity.vo.UserVO;
 import com.sherlock.imService.netty.configure.Configure;
 import com.sherlock.imService.netty.entity.ConversationOfflineMessage;
-import com.sherlock.imService.netty.entity.ServerImMessage;
+import com.sherlock.imService.netty.entity.ImMessage;
+import com.sherlock.imService.netty.entity.OrderMessage;
 
 @Service
 public class RedisService {
@@ -64,18 +72,36 @@ public class RedisService {
 	public boolean setToken(UserVO userVO) {
 		String token = genToken();
 		userVO.setToken(token);
+		userVO.setLastRefreshTime(System.currentTimeMillis());
 		String tokenKey = token2Key(token);
 		String uidKey = userId2Key(userVO.getId());
 		//先将用户的token删除
 		delTokenByUserId(userVO.getId());
-		userVO.setLastRefreshTime(System.currentTimeMillis());
-		//设置token-用户
-		redisTemplate.opsForValue().set(tokenKey, userVO);
-		//设置userId-token
-		redisTemplate.opsForValue().set(uidKey, token);
-		//设置超时时间
-		redisTemplate.expire(tokenKey, RedisConstant.TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
-		redisTemplate.expire(uidKey, RedisConstant.TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
+		List<Object> rs = null;
+		do {
+			rs = redisTemplate.execute(new SessionCallback<List<Object>>() {
+				public List<Object> execute(RedisOperations operations) throws DataAccessException {
+					operations.watch(tokenKey);
+					operations.multi();
+					//设置token-用户
+					operations.opsForValue().set(tokenKey, userVO);
+					//设置userId-token
+					operations.opsForValue().set(uidKey, token);
+					//设置超时时间
+					operations.expire(tokenKey, RedisConstant.TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
+					operations.expire(uidKey, RedisConstant.TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
+					return operations.exec();
+				}
+			});
+			if (rs == null) {
+				try {
+					Thread.sleep(10);
+				} catch (InterruptedException e) {
+					logger.error("线程睡眠异常",e);
+				}
+			}
+		} while(rs==null);
+		
 		return true;
 	}
 	public boolean clearTokenAndUserInfo(int userId) {
@@ -90,9 +116,10 @@ public class RedisService {
 		if(userVO.getLastRefreshTime()+RedisConstant.TOKEN_NEED_REFRESH < curTime){
 			logger.info(userVO.getId()+"token延时设置");
 			String uidKey = userId2Key(userVO.getId());
+			userVO.setLastRefreshTime(curTime);
+			
 			redisTemplate.expire(tokenKey, RedisConstant.TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
 			redisTemplate.expire(uidKey, RedisConstant.TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
-			userVO.setLastRefreshTime(curTime);
 			redisTemplate.opsForValue().set(tokenKey, userVO);
 			logger.info(userVO.getId()+"token延时设置完成");
 		}
@@ -164,24 +191,89 @@ public class RedisService {
 	 * @param msg
 	 */
 	public void saveConversationOfflineMessage(ConversationOfflineMessage msg){	
-		//保存未读
 		redisTemplate.opsForZSet().add(
 				genMsgKey(msg.getRoutId(),msg.getGtype(),msg.getGid()), msg, msg.getTime());
 	}
-	public void addUnreadCount(ServerImMessage msg) {
+	/**
+	 * 保存离线指令消息
+	 * @param msg
+	 */
+	public void saveOfflineOrderMessage(OrderMessage msg){	
+		long curTime = System.currentTimeMillis();
+		msg.setTime(curTime);
+		redisTemplate.opsForZSet().add(
+				genOrderMsgKey(msg.getRoutId()), msg, curTime);
+	}
+	/**
+	 * 获取离线指令消息
+	 * @param msg
+	 */
+	public List<OrderMessage> getOfflineOrderMessage(int routId){	
+		Set<Object> set = redisTemplate.opsForZSet().range(
+				genOrderMsgKey(routId), 0, Long.MAX_VALUE);
+		List<OrderMessage> list = new ArrayList<>(set.size());
+		for (Object o : set) {
+			list.add((OrderMessage) o);
+		}
+		return list;
+	}
+	public void delOfflineOrderMessage(int routId,long time){
+		redisTemplate.opsForZSet().remove(
+				genOrderMsgKey(routId), 0, time);
+	}
+	
+	public void addUnreadCount(ImMessage msg) {
+		List<Object> rs = null;
 		//未读数加一
-//		redisTemplate.opsForValue().increment(genUnreadKey(msg.getToId()), 1);
-		redisTemplate.opsForHash()
-		.increment(genConversationUnreadKey(msg.getRoutId()),
-				///获取会话的hash
-				genConversationUnreadHashString(msg.getGtype(),msg.getGid()), 1);
+		String key = genConversationInfoKey(msg.getRoutId());
+		String hashKey = genConversationUnreadHashString(msg.getGtype(),msg.getGid());
+		String watchKey = key+hashKey;
+////		redisTemplate.watch(key);
+//		UnreadVO unreadVO = (UnreadVO) redisTemplate.opsForHash().get(key, hashKey);
+//		if (unreadVO == null) {
+//			unreadVO = new UnreadVO();
+//			unreadVO.setCount(0);
+//		}
+//		unreadVO.setCount(unreadVO.getCount() + 1);
+//		unreadVO.setLastMsg(msg.getLastMsg());
+//		unreadVO.setLastTime(msg.getTime());
+////		redisTemplate.multi();
+//		// 设置新值
+//		redisTemplate.opsForHash().put(key, hashKey, unreadVO);
+////		redisTemplate.exec();
+		do {
+			rs = redisTemplate.execute(new SessionCallback<List<Object>>() {
+				public List<Object> execute(RedisOperations operations) throws DataAccessException {
+					operations.watch(key);
+					UnreadVO unreadVO = (UnreadVO) operations.opsForHash().get(key, hashKey);
+					if (unreadVO == null) {
+						unreadVO = new UnreadVO();
+						unreadVO.setCount(0);
+					}
+					unreadVO.setCount(unreadVO.getCount() + 1);
+					unreadVO.setLastMsg(MessageConstant.getLastMsg(msg));
+					unreadVO.setLastTime(msg.getTime());
+					operations.multi();
+					// 设置新值
+					operations.opsForHash().put(key, hashKey, unreadVO);
+					return operations.exec();
+				}
+			});
+			if (rs == null) {
+				try {
+					Thread.sleep(10);
+				} catch (InterruptedException e) {
+					logger.error("线程睡眠异常",e);
+				}
+			}
+		} while(rs==null);
 	}
 	
 	/**
 	 * 保存群组消息
 	 * @param msg
 	 */
-	public void saveGroupMessage(ServerImMessage msg){
+	public void saveGroupMessage(ImMessage msg){
 		String key = genGroupMsgKey(msg.getGid());
 		redisTemplate.opsForZSet().add(key, msg,msg.getTime());
 	}
@@ -256,7 +348,7 @@ public class RedisService {
 //		return key;
 //	}
 	//每个会话未读数key
-	private String genConversationUnreadKey(int routId){
+	private String genConversationInfoKey(int routId){
 		StringBuilder sb = new StringBuilder();
 		sb.append(RedisConstant.PREFIX_CONVERSION_UNREAD).append(routId);
 		String key = sb.toString();
@@ -291,7 +383,7 @@ public class RedisService {
 	 */
 	public Map<String,UnreadVO> getUnreadCountMap(int routId) {
 		Map<Object,Object> conUnreadMap;
-		String unreadKey = genConversationUnreadKey(routId);
+		String unreadKey = genConversationInfoKey(routId);
 		if (!redisTemplate.hasKey(unreadKey)) {
 			return new HashMap<>();
 		}
@@ -300,41 +392,40 @@ public class RedisService {
 		Map<String,UnreadVO> map = new HashMap<>(entrySet.size());
 		for (Map.Entry<Object, Object> entry : entrySet) {
 			String key = entry.getKey().toString();
-			Integer value = (Integer) entry.getValue();
-			UnreadVO vo = new UnreadVO();
-			vo.setCount(value);
-			String[] v = key.split("_");
-			int gtype = Integer.valueOf(v[0]);
-			int gid = Integer.valueOf(v[1]);
-			//获取最后的未读消息，写入最后一条消息内容，最后接收消息时间
-			// TODO: 考虑存储最后一条消息
-			String msgKey = genMsgKey(routId, gtype, gid);
-			long count = redisTemplate.opsForZSet().zCard(msgKey);
-			Set<Object> msgSet = redisTemplate.opsForZSet().range(msgKey, count-1, count);
-			Iterator<Object> it = msgSet.iterator();
-			if (it.hasNext()) {
-				ServerImMessage msg = (ServerImMessage) it.next();
-				vo.setLastMsg(msg.getLastMsg());
-				vo.setLastTime(msg.getTime());
-			}
+			UnreadVO vo = (UnreadVO) entry.getValue();
 			map.put(key, vo);
 		}
 		return map;
 	}
 	public void deleteUnreadCountMap(int routId, Map<String, UnreadVO> map) {
-		String unreadKey = genConversationUnreadKey(routId);
+		String unreadKey = genConversationInfoKey(routId);
 		Set<Map.Entry<String, UnreadVO>> entrySet = map.entrySet();
 		for (Map.Entry<String, UnreadVO> entry : entrySet) {
 			UnreadVO unreadVO = entry.getValue();
-			redisTemplate.watch(unreadKey);
-			Integer count = (Integer) redisTemplate.opsForHash().get(unreadKey, entry.getKey());
-			redisTemplate.multi();
-			if (count==unreadVO.getCount().intValue()) {
-				redisTemplate.opsForHash().delete(unreadKey, entry.getKey());
-			} else {
-				redisTemplate.opsForHash().increment(unreadKey, entry.getKey(), -unreadVO.getCount());
-			}
-			redisTemplate.exec();
+			List<Object> rs;
+			do {
+				rs = redisTemplate.execute(new SessionCallback<List<Object>>() {
+					public List<Object> execute(RedisOperations operations) throws DataAccessException {
+						operations.watch(unreadKey);
+						UnreadVO vo = (UnreadVO) operations.opsForHash().get(unreadKey, entry.getKey());
+						operations.multi();
+						vo.setCount(vo.getCount()-unreadVO.getCount());
+						if (vo.getCount()==0) {
+							operations.opsForHash().delete(unreadKey, entry.getKey());
+						} else {
+							operations.opsForHash().put(unreadKey, entry.getKey(), vo);
+						}
+						return operations.exec();
+					}
+				});
+				if (rs == null) {
+					try {
+						Thread.sleep(10);
+					} catch (InterruptedException e) {
+						logger.error("线程睡眠异常",e);
+					}
+				}
+			} while(rs==null);
 		}
 	}
 	/**

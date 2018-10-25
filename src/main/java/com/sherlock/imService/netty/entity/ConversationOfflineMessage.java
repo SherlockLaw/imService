@@ -5,7 +5,7 @@ package com.sherlock.imService.netty.entity;
  * @author Administrator
  *
  */
-public abstract class ConversationOfflineMessage extends ServerCommonMessage{
+public abstract class ConversationOfflineMessage extends OfflineMessage{
 
 	protected int fromUserId;//发送方Id
 	protected int gid;//会话Id 用户/会话组 的id
@@ -13,7 +13,7 @@ public abstract class ConversationOfflineMessage extends ServerCommonMessage{
 	protected int messageType;//消息类型
 	
 	protected String mid;//消息Id
-	protected long time;//发送时间
+	
 	public int getFromUserId() {
 		return fromUserId;
 	}
@@ -44,11 +44,5 @@ public abstract class ConversationOfflineMessage extends ServerCommonMessage{
 	}
 	public void setMid(String mid) {
 		this.mid = mid;
-	}
-	public long getTime() {
-		return time;
-	}
-	public void setTime(long time) {
-		this.time = time;
 	}
 }
