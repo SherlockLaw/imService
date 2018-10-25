@@ -64,6 +64,7 @@ public class GroupService {
 		Group po = new Group();
 		po.setName(name);
 		po.setHeadPic(fileService.genHeadPic(headImage));
+		po.setCreatorId(creatorId);
 		groupMapper.insert(po);
 		
 		List<Integer> memberIdList = new ArrayList<>(memberIds.length+1);

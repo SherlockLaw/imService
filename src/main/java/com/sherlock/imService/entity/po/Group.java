@@ -4,6 +4,7 @@ public class Group {
 	private Integer id;
 	private String name;
 	private String headPic;
+	private Integer creatorId;
 	public Integer getId() {
 		return id;
 	}
@@ -21,5 +22,11 @@ public class Group {
 	}
 	public void setHeadPic(String headPic) {
 		this.headPic = headPic;
+	}
+	public Integer getCreatorId() {
+		return creatorId;
+	}
+	public void setCreatorId(Integer creatorId) {
+		this.creatorId = creatorId;
 	}
 }

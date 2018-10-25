@@ -6,7 +6,7 @@
 	<sql id="table">im_group</sql>
 	
    <insert id = "insert" parameterType = "com.sherlock.imService.entity.po.Group">
-      INSERT INTO <include refid="table"/> (name,headPic) VALUES (#{name}, #{headPic});
+      INSERT INTO <include refid="table"/> (name,headPic,creatorId) VALUES (#{name}, #{headPic},#{creatorId});
       
       <selectKey keyProperty = "id" resultType = "int" order = "AFTER">
          select last_insert_id() as id

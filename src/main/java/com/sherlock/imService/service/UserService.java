@@ -67,7 +67,7 @@ public class UserService {
 		user.setHeadPic(fileService.genHeadPic(headImage));
 		//2、持久化数据
 		userMapper.insert(user);
-		UserVO vo = getVOByPO(existsUser);
+		UserVO vo = getVOByPO(user);
 		redisService.setToken(vo);
 		return vo;
 	}
