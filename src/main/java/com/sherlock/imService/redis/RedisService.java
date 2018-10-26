@@ -218,7 +218,7 @@ public class RedisService {
 		return list;
 	}
 	public void delOfflineOrderMessage(int routId,long time){
-		redisTemplate.opsForZSet().remove(
+		redisTemplate.opsForZSet().removeRangeByScore(
 				genOrderMsgKey(routId), 0, time);
 	}
 	
